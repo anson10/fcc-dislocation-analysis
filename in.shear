@@ -1,0 +1,70 @@
+clear
+units metal
+dimension 3
+boundary p p p
+atom_style atomic
+
+# --- Lattice and simulation box ---
+variable a equal 3.615
+lattice fcc ${a}
+
+# Optional: full size 30x30x30 → 108000 atoms
+region box block 0 20 0 20 0 20 units lattice
+create_box 1 box
+create_atoms 1 region box
+
+mass 1 63.546
+
+# --- Potential ---
+pair_style eam/alloy
+pair_coeff * * potentials/Cu_mishin1.eam.alloy Cu
+
+neighbor 2.0 bin
+neigh_modify delay 0 every 1
+
+# --- Time step ---
+variable dt equal 0.001
+timestep ${dt}
+
+# --- Initial velocities ---
+velocity all create 300.0 12345 mom yes rot yes dist gaussian
+
+# --- Per-atom stress tensor ---
+compute peratomStress all stress/atom NULL
+
+# --- Strain variables ---
+variable erate equal 1e-5        # shear strain rate
+variable strain equal step*${dt}*${erate}
+
+# --- Thermostat (NVT) ---
+fix 1 all nvt temp 300.0 300.0 0.1
+
+# --- Convert to triclinic box for shear ---
+change_box all triclinic
+
+# --- Shear deformation ---
+fix 2 all deform 1 xy erate ${erate} units box remap v
+
+# --- Output settings ---
+thermo 200
+thermo_style custom step v_strain temp pxx pxy pyy pzz etotal
+
+# --- Dump atoms (optimized frequency for speed) ---
+dump 1 all custom 1000 dump.shear id type x y z c_peratomStress[1] c_peratomStress[2] c_peratomStress[3] c_peratomStress[4] c_peratomStress[5] c_peratomStress[6]
+
+dump_modify 1 sort id
+
+# --- Run section ---
+reset_timestep 0
+
+# Relaxation before shearing
+run 2000
+
+# Main shear run
+run 20000
+
+# --- Cleanup ---
+unfix 2
+unfix 1
+
+write_data final.data
