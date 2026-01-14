@@ -3,6 +3,7 @@ units metal
 dimension 3
 boundary p p p
 atom_style atomic
+log log.lammps
 
 # --- Lattice and simulation box ---
 variable a equal 3.615
@@ -50,9 +51,17 @@ thermo 200
 thermo_style custom step v_strain temp pxx pxy pyy pzz etotal
 
 # --- Dump atoms (optimized frequency for speed) ---
-dump 1 all custom 1000 dump.shear id type x y z c_peratomStress[1] c_peratomStress[2] c_peratomStress[3] c_peratomStress[4] c_peratomStress[5] c_peratomStress[6]
+# dump 1 all custom 1000 dump.shear id type x y z c_peratomStress[1] c_peratomStress[2] c_peratomStress[3] c_peratomStress[4] c_peratomStress[5] c_peratomStress[6]
+# dump_modify 1 sort id
 
-dump_modify 1 sort id
+# --- Dump images (Visualisation) ---
+# dump 2 all image 2000 image.*.jpg type type zoom 1.6 adiam 1.5
+# dump_modify 2 pad 5
+
+# Dump colored by Shear Stress (Pxy)
+# Range approx -500 to 500 bars
+dump 3 all image 2000 figures/image_stress.*.jpg c_peratomStress[4] type zoom 1.6 adiam 1.5
+dump_modify 3 pad 5 amap -500 500 cf 0.0 2 min blue max red
 
 # --- Run section ---
 reset_timestep 0

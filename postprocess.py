@@ -2,9 +2,7 @@
 """
 postprocess_ovito.py
 - Parse LAMMPS log for stress-strain
-- Use OVITO (headless) to compute Common Neighbor Analysis (CNA)
-- Count non-FCC atoms per frame
-- Plot stress-strain curve and defects vs time
+- Plot stress-strain curve
 """
 
 import argparse
@@ -14,10 +12,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-# OVITO headless imports
-from ovito.io import import_file
-from ovito.modifiers import CommonNeighborAnalysisModifier
-
 def parse_thermo_log(logfile):
     """Parse last thermo table from LAMMPS log file"""
     with open(logfile, 'r') as f:
@@ -25,7 +19,7 @@ def parse_thermo_log(logfile):
 
     header_idx = None
     for i, ln in enumerate(lines):
-        if re.search(r'^Step\b', ln) and re.search(r'v_strain', ln, re.IGNORECASE):
+        if re.search(r'^\s*Step\b', ln) and re.search(r'v_strain', ln, re.IGNORECASE):
             header_idx = i
 
     if header_idx is None:
@@ -47,25 +41,6 @@ def parse_thermo_log(logfile):
     df = pd.DataFrame(data_rows, columns=colnames).apply(pd.to_numeric)
     return df
 
-def compute_cna_defects(dumpfile):
-    """Compute CNA and count non-FCC atoms for each frame"""
-    pipeline = import_file(dumpfile)
-    cna = CommonNeighborAnalysisModifier()
-    pipeline.modifiers.append(cna)
-
-    nframes = pipeline.source.num_frames
-    defect_counts = np.zeros(nframes, dtype=int)
-    total_atoms = None
-
-    for frame in range(nframes):
-        data = pipeline.compute(frame)
-        structure = data.particles['Structure Type'].array  # 0=unknown, 1=FCC, 2=HCP, 3=BCC, 4=ICO
-        defect_counts[frame] = np.sum(structure != 1)  # count non-FCC
-        if total_atoms is None:
-            total_atoms = len(structure)
-
-    return np.arange(nframes), defect_counts, total_atoms
-
 def plot_stress_strain(strain, stress, outdir):
     os.makedirs(outdir, exist_ok=True)
     plt.figure(figsize=(6,4))
@@ -74,24 +49,13 @@ def plot_stress_strain(strain, stress, outdir):
     plt.ylabel('Shear stress (Pxy)')
     plt.title('Stress-Strain Curve')
     plt.grid(True)
+    plt.xticks(rotation=45)
     plt.tight_layout()
     plt.savefig(os.path.join(outdir, 'stress_strain.png'), dpi=300)
     plt.close()
 
-def plot_defects(times, defects, outdir):
-    plt.figure(figsize=(6,4))
-    plt.plot(times, defects, '-o', markersize=3)
-    plt.xlabel('Time (LAMMPS steps)')
-    plt.ylabel('Number of non-FCC atoms (defects)')
-    plt.title('Defects vs Time')
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig(os.path.join(outdir, 'defects_vs_time.png'), dpi=300)
-    plt.close()
-
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dump', required=True, help='LAMMPS dump file')
     parser.add_argument('--log', required=True, help='LAMMPS log file')
     parser.add_argument('--out', default='figures', help='Output directory')
     args = parser.parse_args()
@@ -127,21 +91,6 @@ def main():
     # Plot stress-strain
     plot_stress_strain(strain, stress, args.out)
     print("Saved stress-strain plot.")
-
-    # Compute defects using OVITO
-    print("Computing defects using OVITO CNA...")
-    frames, defect_counts, total_atoms = compute_cna_defects(args.dump)
-    frame_times = np.linspace(0, len(strain)-1, len(frames))
-
-    # Save defects CSV
-    df_defects = pd.DataFrame({'frame': frames, 'time': frame_times, 'defect_count': defect_counts})
-    df_defects.to_csv(os.path.join(args.out, 'defects_vs_time.csv'), index=False)
-    print("Saved defects CSV:", os.path.join(args.out, 'defects_vs_time.csv'))
-
-    # Plot defects
-    plot_defects(frame_times, defect_counts, args.out)
-    print("Saved defects vs time plot.")
-    print("Total atoms detected:", total_atoms)
     print("Done.")
 
 if __name__ == "__main__":
