@@ -1,6 +1,7 @@
 # FCC Dislocation Analysis: Copper Shear Simulation
 
 ![Simulation Visualization](figures/image_stress.10000.jpg)
+
 *Figure 1: Visualization of internal stress in the copper crystal during shearing. Red atoms indicate high stress (potential defects).*
 
 ## Project Overview
